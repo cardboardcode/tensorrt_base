@@ -1,5 +1,17 @@
 #include "tensorrt_base.hpp"
 
+/* Function Description: Constructor 1 of class TensorRTModule
+Inputs -
+model_path -> file directory path to your .onnx model
+batch_size ->
+max_workspace_size -> The memory limit the user sets for your ML algorithm to use during operation.
+-If the limit is breached, do not consider running the algorithm
+Outputs -
+NIL
+*/
+// This uses a member initializer list to assign values immediately to a class public or private attributes.
+// The use of initializer list is for performance reason.
+// https://www.geeksforgeeks.org/when-do-we-use-initializer-list-in-c/
 TensorRTModule::TensorRTModule(std::string model_path, int batch_size,
                                int max_workspace_size)
     : model_path_(model_path),
@@ -8,11 +20,12 @@ TensorRTModule::TensorRTModule(std::string model_path, int batch_size,
       max_workspace_size_(max_workspace_size) {
   // TODO: DLA stuff as mentioned in commons, probably play with fp16
 
-  // create the initial objects needed
+  // Create the initial objects needed
   trt_builder_ =
       tensorrt_common::infer_object(nvinfer1::createInferBuilder(g_logger_));
   trt_builder_->setMaxBatchSize(batch_size_);
   trt_builder_->setMaxWorkspaceSize(max_workspace_size_);
+
   // trt_builder and trt_runtime
   trt_network_ = tensorrt_common::infer_object(trt_builder_->createNetwork());
   trt_parser_ = tensorrt_common::infer_object(
@@ -72,6 +85,15 @@ TensorRTModule::TensorRTModule(std::string model_path, int batch_size,
   CHECK(cudaStreamCreate(&stream_));
 }
 
+/*Function Description: Constructor 2 of class TensorRTModule
+Inputs -
+model_path -> file directory path to your .onnx model
+batch_size -> Number of sample to propogate through network before updating weights
+
+Outputs -
+NIL
+
+*/
 TensorRTModule::TensorRTModule(std::string model_path, int batch_size)
     : model_path_(model_path),
       model_type_(tensorrt_common::getFileType(model_path)),
@@ -79,8 +101,8 @@ TensorRTModule::TensorRTModule(std::string model_path, int batch_size)
   trt_runtime_ =
       tensorrt_common::infer_object(nvinfer1::createInferRuntime(g_logger_));
 
-  std::stringstream gie_model_stream;
-  gie_model_stream.seekg(0, gie_model_stream.beg);
+  std::stringstream gie_model_stream; // Define a string as a stream object
+  gie_model_stream.seekg(0, gie_model_stream.beg); // Set input position at the beginning of the stream buffer.
   std::ifstream cache(model_path_);
   gie_model_stream << cache.rdbuf();
   cache.close();
@@ -111,6 +133,7 @@ TensorRTModule::TensorRTModule(std::string model_path, int batch_size)
   output_dims_.clear();
   output_vols_.clear();
   output_mem_.clear();
+
   for (int binding = 0; binding < n_bindings_; binding++) {
     nvinfer1::Dims curr_dim = trt_engine_->getBindingDimensions(binding);
     if (trt_engine_->bindingIsInput(binding)) {
@@ -131,8 +154,17 @@ TensorRTModule::TensorRTModule(std::string model_path, int batch_size)
   }
 }
 
+//Function Description: Deconstructor of class TensorRTModule
 TensorRTModule::~TensorRTModule() { cudaStreamDestroy(stream_); }
 
+/*Function Description: Mutator 1 of class TensorRTModule
+Inputs -
+input (Takes in a float-type vector of an input image)
+
+Outputs -
+
+
+*/
 bool TensorRTModule::inference(const std::vector<std::vector<float>>& input) {
   // safety: must be same number of inputs
   if (static_cast<int>(input.size()) != n_inputs_)
@@ -146,6 +178,8 @@ bool TensorRTModule::inference(const std::vector<std::vector<float>>& input) {
                           batch_size_ * input_vols_[i] * sizeof(float),
                           cudaMemcpyHostToDevice, stream_));
   }
+  // Waits for the copying of input to device to complete.
+  // Think of this as a cuda-specific wait function
   cudaStreamSynchronize(stream_);
 
   // inference
@@ -171,6 +205,13 @@ const std::vector<float>& TensorRTModule::get_output(int output_index) {
   return output_mem_[output_index];
 }
 
+/*Function Description: Accessor - Saves the .engine file generated from a parsed ONNX model.
+Inputs -
+the ONNX model dimensions
+
+Outputs -
+Print to terminal the ONNX dimensions.
+*/
 void TensorRTModule::save_engine(std::string engine_path) {
   if (!trt_engine_) runtime_error_("Engine not created yet, unable to save.");
 
@@ -181,6 +222,14 @@ void TensorRTModule::save_engine(std::string engine_path) {
   ofs.close();
 }
 
+// UNUSED
+/*Function Description: Utility funciton to print out the dimensions of an ONNX model
+Inputs -
+the ONNX model dimensions
+
+Outputs -
+Print to terminal the ONNX dimensions.
+*/
 void print_dims(nvinfer1::Dims dimensions) {
   for (int i = 0; i < dimensions.nbDims; i++) {
     std::cout << dimensions.d[i] << " ";
