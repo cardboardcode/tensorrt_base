@@ -26,8 +26,10 @@ TensorRTModule::TensorRTModule(std::string model_path, int batch_size,
   trt_builder_->setMaxBatchSize(batch_size_);
   trt_builder_->setMaxWorkspaceSize(max_workspace_size_);
 
+  const auto explicitBatch = 1U << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
+
   // trt_builder and trt_runtime
-  trt_network_ = tensorrt_common::infer_object(trt_builder_->createNetwork());
+  trt_network_ = tensorrt_common::infer_object(trt_builder_->createNetworkV2(explicitBatch));
   trt_parser_ = tensorrt_common::infer_object(
       nvonnxparser::createParser(*trt_network_, g_logger_));
   trt_runtime_ =
@@ -89,10 +91,8 @@ TensorRTModule::TensorRTModule(std::string model_path, int batch_size,
 Inputs -
 model_path -> file directory path to your .onnx model
 batch_size -> Number of sample to propogate through network before updating weights
-
 Outputs -
 NIL
-
 */
 TensorRTModule::TensorRTModule(std::string model_path, int batch_size)
     : model_path_(model_path),
@@ -160,12 +160,11 @@ TensorRTModule::~TensorRTModule() { cudaStreamDestroy(stream_); }
 /*Function Description: Mutator 1 of class TensorRTModule
 Inputs -
 input (Takes in a float-type vector of an input image)
-
 Outputs -
-
-
+Boolean true or false
 */
 bool TensorRTModule::inference(const std::vector<std::vector<float>>& input) {
+
   // safety: must be same number of inputs
   if (static_cast<int>(input.size()) != n_inputs_)
     runtime_error_("number of inputs incorrect");
@@ -183,8 +182,8 @@ bool TensorRTModule::inference(const std::vector<std::vector<float>>& input) {
   cudaStreamSynchronize(stream_);
 
   // inference
-  this->trt_context_->enqueue(batch_size_, engine_mem_.data(), stream_,
-                              nullptr);
+  this->trt_context_->enqueueV2(engine_mem_.data(), stream_,
+                                                          nullptr);
   cudaStreamSynchronize(stream_);
 
   // copy from device to output asynchronously
