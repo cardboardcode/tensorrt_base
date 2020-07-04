@@ -14,15 +14,29 @@ TensorRTModule::TensorRTModule(std::string model_path, int batch_size,
   trt_builder_->setMaxBatchSize(batch_size_);
   trt_builder_->setMaxWorkspaceSize(max_workspace_size_);
   // trt_builder and trt_runtime
-  trt_network_ = tensorrt_common::infer_object(trt_builder_->createNetwork());
+
+  // const auto explicitBatch = 1U << static_cast<int>(nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
+  const auto explicitBatch = 1U << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
+
+  trt_network_ = tensorrt_common::infer_object(trt_builder_->createNetworkV2(explicitBatch));
+  // trt_network_ = tensorrt_common::infer_object(trt_builder_->createNetwork());
   trt_parser_ = tensorrt_common::infer_object(
       nvonnxparser::createParser(*trt_network_, g_logger_));
   trt_runtime_ =
       tensorrt_common::infer_object(nvinfer1::createInferRuntime(g_logger_));
 
+  std::cout << trt_parser_->parseFromFile(model_path_.c_str(), verbosity_) << std::endl;
+
+  // std::cout << "trt_parser_.getNbErrors() = " << trt_parser_->getNbErrors() << std::endl;
+  // for (int i = 0; i < trt_parser_->getNbErrors(); ++i)
+	// {
+	// 	std::cout << trt_parser_->getError(i)->desc() << std::endl;
+	// }
+
   // load the onnx model
   if (strcmp(model_type_.c_str(), "onnx") == 0) {
     if (!trt_parser_->parseFromFile(model_path_.c_str(), verbosity_))
+      // std::cout << "LOL" << std::endl;
       runtime_error_("failed to parse onnx file");
   }
 
