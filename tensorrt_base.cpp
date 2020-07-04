@@ -1,6 +1,6 @@
 #include "tensorrt_base.hpp"
 
-/* Function Description: Constructor 1 of class TensorRTModule
+/* Function Description: Constructor 1 of class TensorRTModule for onnx model files.
 Inputs -
 model_path -> file directory path to your .onnx model
 batch_size ->
@@ -20,6 +20,12 @@ TensorRTModule::TensorRTModule(std::string model_path, int batch_size,
       max_workspace_size_(max_workspace_size) {
   // TODO: DLA stuff as mentioned in commons, probably play with fp16
 
+  std::cout << "Inside tensorrt_base.cpp>>>>>>>>>>>>>>>>>>>>>>>>>>" << std::endl;
+  std::cout << "[model_path] = " << model_path_ << std::endl;
+  std::cout << "[model_type] = " << model_type_ << std::endl;
+  std::cout << "[batch_size] = " << batch_size_ << std::endl;
+  std::cout << "[max_workspace_size] = " << max_workspace_size_ << std::endl;
+
   // Create the initial objects needed
   trt_builder_ =
       tensorrt_common::infer_object(nvinfer1::createInferBuilder(g_logger_));
@@ -37,9 +43,19 @@ TensorRTModule::TensorRTModule(std::string model_path, int batch_size,
 
   // load the onnx model
   if (strcmp(model_type_.c_str(), "onnx") == 0) {
-    if (!trt_parser_->parseFromFile(model_path_.c_str(), verbosity_))
-      runtime_error_("failed to parse onnx file");
+    if (!trt_parser_->parseFromFile(model_path_.c_str(), verbosity_)){
+      std::cout << "failed to parse onnx file" << std::endl;
+    }
+      std::cout << ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>" << trt_parser_->getNbErrors() << std::endl;
+
+      for (int i = 0; i < trt_parser_->getNbErrors(); ++i){
+		      std::cout << trt_parser_->getError(i)->desc() << std::endl;
+	    }
+      // runtime_error_("failed to parse onnx file");
+
   }
+
+  std::cout << "ONNX model file parsed successfully." << std::endl;
 
   // get some network details used in inference later
   n_inputs_ = trt_network_->getNbInputs();
@@ -55,15 +71,30 @@ TensorRTModule::TensorRTModule(std::string model_path, int batch_size,
   output_mem_.reserve(n_outputs_);
   output_mem_.clear();
 
+  std::cout << "[n_bindings_] = " << n_bindings_ << std::endl;
+
+  std::cout << "[After getting network details for inference later.]" << std::endl;
+
   // saves the dimensions for use later, also mallocs on host and device
+  // Using n_inputs_, input_dims, trt_network, input_vols.
+
   for (int input_index = 0; input_index < n_inputs_; input_index++) {
+    std::cout << "[1input_index] = " << input_index << std::endl;
     nvinfer1::Dims curr_dim =
         trt_network_->getInput(input_index)->getDimensions();
+        std::cout << "[2input_index] = " << input_index << std::endl;
     input_dims_.push_back(curr_dim);
+    std::cout << "[3input_index] = " << input_index << std::endl;
     input_vols_.push_back(tensorrt_common::volume(curr_dim));
+    std::cout << "[4input_index] = " << input_index << std::endl;
     engine_smart_mem_.push_back(cuda_malloc_from_dims(curr_dim));
+    std::cout << "[5input_index] = " << input_index << std::endl;
     engine_mem_.push_back(engine_smart_mem_.back().get());
+    std::cout << "[6input_index] = " << input_index << std::endl;
   }
+
+  std::cout << "[After 1st for loop.]" << std::endl;
+
   for (int output_index = 0; output_index < n_outputs_; output_index++) {
     nvinfer1::Dims curr_dim =
         trt_network_->getOutput(output_index)->getDimensions();
@@ -77,6 +108,8 @@ TensorRTModule::TensorRTModule(std::string model_path, int batch_size,
     output_mem_.push_back(curr_output_mem);
   }
 
+  std::cout << "[After saving dimensions]" << std::endl;
+
   // get the final engines, inference contexts and cudaStream
   trt_engine_ = tensorrt_common::infer_object(
       trt_builder_->buildCudaEngine(*trt_network_));
@@ -85,9 +118,12 @@ TensorRTModule::TensorRTModule(std::string model_path, int batch_size,
   trt_context_ =
       tensorrt_common::infer_object(trt_engine_->createExecutionContext());
   CHECK(cudaStreamCreate(&stream_));
+
+  std::cout << "[Exiting constructor function]" << std::endl;
+
 }
 
-/*Function Description: Constructor 2 of class TensorRTModule
+/*Function Description: Constructor 2 of class TensorRTModule for serialized engine file.
 Inputs -
 model_path -> file directory path to your .onnx model
 batch_size -> Number of sample to propogate through network before updating weights
